@@ -93,6 +93,7 @@ class LimboReconnectLifecycleTest {
     assertTrue(updated.contains("# Administrator comment"));
     assertTrue(updated.contains("custom-key: 42"));
     assertTrue(updated.contains("ping-timeout:"));
+    assertTrue(updated.contains("integrate-ctd-queue: true"));
     plugin.reload();
     assertEquals(updated, Files.readString(config));
   }

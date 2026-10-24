@@ -1,0 +1,36 @@
+{
+  "tests": 7,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "cases": [
+    {
+      "name": "replacementManagerAdoptsOnlyItsExistingEntry()",
+      "classname": "net.elytrium.limboreconnect.handler.CtdQueueIntegrationTest"
+    },
+    {
+      "name": "nativeVersionRejectionDoesNotLoopOrForceAConnection()",
+      "classname": "net.elytrium.limboreconnect.handler.CtdQueueIntegrationTest"
+    },
+    {
+      "name": "nativeManagerPreservesPriorityFifoAndExistingEntryIdentity()",
+      "classname": "net.elytrium.limboreconnect.handler.CtdQueueIntegrationTest"
+    },
+    {
+      "name": "disableBetweenQueueReadsCannotThrowOrAbandonTheGuard()",
+      "classname": "net.elytrium.limboreconnect.handler.CtdQueueIntegrationTest"
+    },
+    {
+      "name": "offlineWarmupFullAndPausedRemainUnderNativeTransferPolicy()",
+      "classname": "net.elytrium.limboreconnect.handler.CtdQueueIntegrationTest"
+    },
+    {
+      "name": "replacementManagerDoesNotReinsertMissingEntry()",
+      "classname": "net.elytrium.limboreconnect.handler.CtdQueueIntegrationTest"
+    },
+    {
+      "name": "explicitRemovalNeverRecreatesTheNativeEntry()",
+      "classname": "net.elytrium.limboreconnect.handler.CtdQueueIntegrationTest"
+    }
+  ]
+}

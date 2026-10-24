@@ -55,13 +55,18 @@ public class ReconnectListener {
           return false;
         }
       }
-      if (kickEvent.kickedDuringServerConnect() || !kickEvent.getPlayer().isActive()) {
+      if (!kickEvent.getPlayer().isActive()) {
         return false;
       }
 
       Component kickReason = kickEvent.getServerKickReason().isPresent() ? kickEvent.getServerKickReason().get() : Component.empty();
+      boolean managedRetry = kickEvent.kickedDuringServerConnect()
+          && this.plugin.isManagedQueueRetry(kickEvent.getPlayer(), kickEvent.getServer(), kickReason);
+      if (kickEvent.kickedDuringServerConnect() && !managedRetry) {
+        return false;
+      }
       String kickMessage = Objects.requireNonNullElse(SERIALIZER.serialize(kickReason), "unknown");
-      boolean match = this.plugin.triggerMessage.matcher(kickMessage).matches();
+      boolean match = managedRetry || this.plugin.triggerMessage.matcher(kickMessage).matches();
       if (CONFIG.debug) {
         LimboReconnect.getLogger().info("Component: {}", kickReason);
         LimboReconnect.getLogger().info("Kick message: {}", kickMessage);

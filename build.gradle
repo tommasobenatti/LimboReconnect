@@ -7,7 +7,7 @@ plugins {
 }
 
 setGroup("net.elytrium")
-setVersion("1.1.7-MCExp-CTD410")
+setVersion("1.1.7-MCExp-CTD410.1")
 
 compileJava {
   getOptions().setEncoding("UTF-8")
@@ -31,8 +31,25 @@ repositories {
   }
 }
 
+configurations {
+  limboApiTransitives {
+    canBeConsumed = false
+    canBeResolved = true
+  }
+}
+
 dependencies {
-  compileOnly("net.elytrium.limboapi:api:$limboapiVersion")
+  if (providers.gradleProperty("limboApiJar").isPresent()) {
+    compileOnly(files(providers.gradleProperty("limboApiJar").get()))
+    limboApiTransitives("net.elytrium.limboapi:api:$limboapiVersion")
+    compileOnly(configurations.limboApiTransitives.incoming.artifactView {
+      componentFilter { component ->
+        !(component instanceof ModuleComponentIdentifier && component.group == "net.elytrium.limboapi" && component.module == "api")
+      }
+    }.files)
+  } else {
+    compileOnly("net.elytrium.limboapi:api:$limboapiVersion")
+  }
   if (providers.gradleProperty("velocityCtdJar").isPresent()) {
     compileOnly(files(providers.gradleProperty("velocityCtdJar").get()))
     annotationProcessor(files(providers.gradleProperty("velocityCtdJar").get()))
@@ -55,6 +72,10 @@ configurations.testImplementation.extendsFrom(configurations.compileOnly)
 test {
   useJUnitPlatform()
   jvmArgs("-XX:+EnableDynamicAgentLoading")
+  if (providers.gradleProperty("velocityCtdJar").isPresent()) {
+    // Reproduce CTD's runtime-provided classes rather than older compile-only API transitives.
+    classpath = files(providers.gradleProperty("velocityCtdJar").get()) + classpath
+  }
 }
 
 shadowJar {

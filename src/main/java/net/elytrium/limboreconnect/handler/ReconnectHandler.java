@@ -21,8 +21,10 @@ import static net.elytrium.limboreconnect.LimboReconnect.CONFIG;
 
 import com.velocitypowered.api.proxy.server.PingOptions;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import com.velocitypowered.proxy.connection.client.ConnectedPlayer;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
@@ -33,10 +35,13 @@ import net.elytrium.limboapi.api.player.LimboPlayer;
 import net.elytrium.limboreconnect.Config;
 import net.elytrium.limboreconnect.LimboReconnect;
 import net.elytrium.limboreconnect.protocol.packets.PlaySound;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.title.Title;
 
 public class ReconnectHandler implements LimboSessionHandler {
 
+  private static final long QUEUE_GUARD_INTERVAL = 250;
+  private final LimboReconnect plugin;
   private final PingOptions pingOptions = PingOptions.builder().timeout(Duration.ofMillis(Math.max(1, CONFIG.pingTimeout))).build();
   private final RegisteredServer server;
   private final List<Title> offlineTitles;
@@ -44,7 +49,7 @@ public class ReconnectHandler implements LimboSessionHandler {
   private final long checkInterval = Math.max(1, CONFIG.checkInterval);
   private final long joinDelay = Math.max(0, CONFIG.joinDelay);
   private final long messageInterval = Math.clamp(CONFIG.messages.titles.showDelay, 1, Long.MAX_VALUE / 50) * 50;
-  private LimboPlayer player;
+  private volatile LimboPlayer player;
   private volatile boolean connected = true;
   private boolean connecting = false;
   private int titleIndex = -1;
@@ -54,8 +59,16 @@ public class ReconnectHandler implements LimboSessionHandler {
   private ScheduledFuture<?> messageTask;
   private ScheduledFuture<?> reconnectTask;
   private CompletableFuture<?> pendingPing;
+  private volatile CtdQueueSupport nativeQueue;
+  private boolean initialized;
+  private volatile boolean closed;
+  private ScheduledFuture<?> queueTask;
+  private boolean recoveryPending;
+  private volatile boolean detachedNativeHandoff;
+  private long lastCommand;
 
   public ReconnectHandler(LimboReconnect plugin, RegisteredServer server) {
+    this.plugin = plugin;
     this.server = server;
     this.offlineTitles = List.copyOf(plugin.offlineTitles);
     this.connectingTitles = List.copyOf(plugin.connectingTitles);
@@ -69,23 +82,189 @@ public class ReconnectHandler implements LimboSessionHandler {
 
   @Override
   public void onSpawn(Limbo server, LimboPlayer player) {
+    if (this.closed) {
+      return;
+    }
     this.player = player;
+    this.connected = true;
+    this.recoveryPending = false;
+    this.detachedNativeHandoff = false;
+    this.plugin.trackHandler(player.getProxyPlayer(), this);
     this.player.disableFalling();
     this.player.setGameMode(CONFIG.world.gamemode);
-    this.schedulePing();
+    if (!this.initialized) {
+      this.initialized = true;
+      this.nativeQueue = CtdQueueSupport.create(this.plugin.getServer(), player.getProxyPlayer(), this.server);
+    }
+    if (this.nativeQueue == null) {
+      cancel(this.queueTask);
+      this.queueTask = null;
+      this.schedulePing();
+    } else {
+      this.nativeQueue.tryEnqueue();
+      this.scheduleQueueGuard();
+    }
     this.tickMessages();
   }
 
   @Override
   public void onDisconnect() {
+    if (this.closed) {
+      return;
+    }
     this.connected = false;
+    CtdQueueSupport queue = this.nativeQueue;
+    if (queue != null && queue.isTargetConnectionPending()) {
+      this.detachedNativeHandoff = true;
+    }
+    this.stopLimboTasks();
+    if ((this.nativeQueue == null && !this.detachedNativeHandoff) || !this.player.getProxyPlayer().isActive()) {
+      this.close();
+    }
+  }
+
+  private void stopLimboTasks() {
     cancel(this.pingTask);
     cancel(this.messageTask);
     cancel(this.reconnectTask);
+    this.pingTask = null;
+    this.messageTask = null;
+    this.reconnectTask = null;
     if (this.pendingPing != null) {
       this.pendingPing.cancel(false);
       this.pendingPing = null;
     }
+  }
+
+  /** A limbo release during a native connection is not a physical player disconnect. */
+  public void close() {
+    this.closed = true;
+    this.connected = false;
+    this.detachedNativeHandoff = false;
+    this.stopLimboTasks();
+    cancel(this.queueTask);
+    this.queueTask = null;
+    if (this.player != null) {
+      this.plugin.removeHandler(this.player.getProxyPlayer(), this);
+    }
+  }
+
+  public boolean isNativeQueueTarget(RegisteredServer target) {
+    return !this.closed && (this.nativeQueue != null || this.detachedNativeHandoff) && this.server.equals(target);
+  }
+
+  public boolean canRecoverQueueKick(RegisteredServer target, Component reason) {
+    if (!this.isNativeQueueTarget(target)) {
+      return false;
+    }
+    CtdQueueSupport queue = this.nativeQueue;
+    if (queue != null) {
+      return queue.canRecoverKick(reason, this.detachedNativeHandoff && !this.connected);
+    }
+    return this.detachedNativeHandoff && !this.connected && CtdQueueSupport.allowsKickReason(this.plugin.getServer(), reason);
+  }
+
+  @Override
+  public void onChat(String chat) {
+    CtdQueueSupport queue = this.nativeQueue;
+    if (!this.connected || this.closed || queue == null || !chat.startsWith("/")) {
+      return;
+    }
+    String command = chat.substring(1).strip();
+    String label = command.split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
+    long now = System.nanoTime();
+    if (!queue.acceptsCommand(label) || (this.lastCommand != 0 && now - this.lastCommand < TimeUnit.MILLISECONDS.toNanos(250))) {
+      return;
+    }
+    this.lastCommand = now;
+    if (queue.isLeaveCommand(label)) {
+      queue.cancelAutomaticEnqueue();
+    }
+    this.plugin.getServer().getCommandManager().executeAsync(this.player.getProxyPlayer(), command)
+        .exceptionally(exception -> {
+          LimboReconnect.getLogger().warn("Unable to execute a native queue command", exception);
+          return false;
+        });
+  }
+
+  private void scheduleQueueGuard() {
+    if (this.closed || this.queueTask != null) {
+      return;
+    }
+    try {
+      this.queueTask = this.player.getScheduledExecutor().schedule(this::tickQueue, QUEUE_GUARD_INTERVAL, TimeUnit.MILLISECONDS);
+    } catch (RejectedExecutionException exception) {
+      this.close();
+    }
+  }
+
+  private void tickQueue() {
+    this.queueTask = null;
+    if (this.closed) {
+      return;
+    }
+    if (!this.player.getProxyPlayer().isActive() || this.player.getProxyPlayer().getCurrentServer().isPresent()) {
+      this.close();
+      return;
+    }
+    CtdQueueSupport queue = this.nativeQueue;
+    if (queue != null && !queue.refresh()) {
+      if (queue.isTargetRemoved()) {
+        this.disconnectRemovedTarget();
+        return;
+      }
+      this.nativeQueue = null;
+      queue = null;
+    }
+    if (this.connected && queue == null) {
+      if (this.pingTask == null) {
+        this.schedulePing();
+      }
+      return;
+    }
+    if (this.connected) {
+      queue.tryEnqueue();
+      this.connecting = queue.waitingForConnection();
+    } else if (this.player.getProxyPlayer() instanceof ConnectedPlayer proxyPlayer && proxyPlayer.getConnectionInFlight() != null) {
+      this.scheduleQueueGuard();
+      return;
+    } else if (!this.player.isServerConnectionPrepared()) {
+      this.close();
+      return;
+    } else if (!this.isWaitingForNativeConnection() && !this.recoveryPending) {
+      // Native completion and CTD's fallback may race. Give the same event loop one turn to establish a fallback.
+      this.recoveryPending = true;
+      try {
+        this.player.getScheduledExecutor().execute(() -> {
+          this.recoveryPending = false;
+          if (!this.closed && !this.connected && this.player.getProxyPlayer().isActive()
+              && this.player.getProxyPlayer().getCurrentServer().isEmpty()
+              && (!(this.player.getProxyPlayer() instanceof ConnectedPlayer proxyPlayer) || proxyPlayer.getConnectionInFlight() == null)
+              && !this.isWaitingForNativeConnection() && this.player.isServerConnectionPrepared()) {
+            this.plugin.recoverPlayer(this.player.getProxyPlayer(), this);
+          }
+        });
+      } catch (RejectedExecutionException exception) {
+        this.close();
+        return;
+      }
+    }
+    this.scheduleQueueGuard();
+  }
+
+  private boolean isWaitingForNativeConnection() {
+    CtdQueueSupport queue = this.nativeQueue;
+    return queue != null && queue.waitingForConnection();
+  }
+
+  private boolean isTargetRegistered() {
+    return this.plugin.getServer().getServer(this.server.getServerInfo().getName()).filter(this.server::equals).isPresent();
+  }
+
+  private void disconnectRemovedTarget() {
+    this.close();
+    this.player.getProxyPlayer().disconnect(Component.translatable("velocity.command.server-does-not-exist",
+        Component.text(this.server.getServerInfo().getName())));
   }
 
   @Override
@@ -96,6 +275,10 @@ public class ReconnectHandler implements LimboSessionHandler {
 
   private void tick() {
     if (!this.connected) {
+      return;
+    }
+    if (!this.isTargetRegistered()) {
+      this.disconnectRemovedTarget();
       return;
     }
 
@@ -135,6 +318,10 @@ public class ReconnectHandler implements LimboSessionHandler {
       this.titleIndex = -1;
       this.reconnectTask = this.player.getScheduledExecutor().schedule(() -> {
         if (this.connected && this.player.getProxyPlayer().isActive()) {
+          if (!this.isTargetRegistered()) {
+            this.disconnectRemovedTarget();
+            return;
+          }
           this.player.writePacket(this.connectSound);
           this.player.getProxyPlayer().resetTitle();
           this.onDisconnect();

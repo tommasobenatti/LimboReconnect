@@ -106,6 +106,40 @@ class ReconnectListenerTest {
   }
 
   @Test
+  void acceptsMatchingShutdownOnlyDuringManagedNativeQueueRetry() {
+    when(this.plugin.isManagedQueueRetry(this.player, this.server, this.reason)).thenReturn(true);
+    new ReconnectListener(this.plugin).onLoginLimboRegister(this.login);
+
+    assertTrue(this.login.getOnKickCallback().apply(this.kick(true)));
+    verify(this.plugin).addPlayer(this.player, this.server);
+  }
+
+  @Test
+  void managedQueueRetryRecoversTransientReasonOutsideInitialRestartRegex() {
+    Component full = Component.text("Server is full");
+    when(this.plugin.isManagedQueueRetry(this.player, this.server, full)).thenReturn(true);
+    new ReconnectListener(this.plugin).onLoginLimboRegister(this.login);
+    KickedFromServerEvent event = new KickedFromServerEvent(this.player, this.server, full, true,
+        KickedFromServerEvent.DisconnectPlayer.create(full));
+
+    assertTrue(this.login.getOnKickCallback().apply(event));
+    verify(this.plugin).addPlayer(this.player, this.server);
+  }
+
+  @Test
+  void managedRetryStillPreservesPreviousPluginsAuthenticationFailure() {
+    when(this.plugin.isManagedQueueRetry(this.player, this.server, this.reason)).thenReturn(true);
+    this.login.setOnKickCallback(event -> {
+      event.setResult(KickedFromServerEvent.DisconnectPlayer.create(Component.text("Authentication required")));
+      return false;
+    });
+    new ReconnectListener(this.plugin).onLoginLimboRegister(this.login);
+
+    assertFalse(this.login.getOnKickCallback().apply(this.kick(true)));
+    verify(this.plugin, never()).addPlayer(any(), any());
+  }
+
+  @Test
   void acceptsVelocityCtdWrappedDefaultDisconnectReason() {
     new ReconnectListener(this.plugin).onLoginLimboRegister(this.login);
     KickedFromServerEvent event = this.kick(false);

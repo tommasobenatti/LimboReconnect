@@ -4,14 +4,21 @@
 
 ## MCExp / Velocity-CTD 410 fork
 
-This fork targets **Velocity-CTD 4.3.1-SNAPSHOT build 410** and **Java 25+**.
+This fork targets **Velocity-CTD 4.3.1-SNAPSHOT builds 410/411** and **Java 25+**.
 Install the paired MCExp builds of [LimboAPI](https://github.com/tommasobenatti/LimboAPI/releases)
 and [LimboReconnect](https://github.com/tommasobenatti/LimboReconnect/releases).
 Keep existing configuration folders; replace both jars with the proxy stopped.
 These binaries are specific to CTD and are not advertised as drop-in upstream Velocity builds.
 
-Reconnect timers, pending pings, kick callback composition, empty titles, packet encoding,
-reload disposal and conservative configuration upgrades are covered by 34 regression tests.
+Reconnects now enter **CTD's native queue** by default. CTD retains entry identity,
+priority/FIFO order, paused/full/offline behavior, warmup checks and retry policy.
+`integrate-ctd-queue: false` restores standalone ping reconnects. Existing configuration
+receives the new key automatically without replacing administrator settings.
+
+The matching LimboAPI **1.1.27-MCExp-CTD410.1** is required for native queue handoffs.
+Configured native queue/leave commands work inside reconnect limbo; their normal
+permissions still apply. After leaving or native retry removal, players remain in limbo
+until they choose a queue/server or disconnect; automatic insertion does not restart.
 
 The paired build passed an isolated test with actual ForcePack 1.3.75-SNAPSHOT and
 nLogin 2.0.18, including a 36-second CONFIG connection and two reloads of each plugin.
@@ -21,6 +28,7 @@ premium/password authentication still require an in-game staging check.
 - [Build, installation and release notes](docs/MCEXP.md)
 - [Changelog](CHANGELOG.md)
 - [Regression evidence](docs/velocity-ctd-compatibility.tdd.md)
+- [Native CTD queue behavior and regression evidence](docs/ctd-native-queue.tdd.md)
 - [Isolated compatibility result](docs/smoke-verification.md)
 
 The upstream project information follows below.

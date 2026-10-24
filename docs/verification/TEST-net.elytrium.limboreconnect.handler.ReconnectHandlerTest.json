@@ -1,11 +1,27 @@
 {
-  "tests": 7,
+  "tests": 34,
   "failures": 0,
   "errors": 0,
   "skipped": 0,
   "cases": [
     {
+      "name": "onlyConfiguredNativeQueueCommandsAreForwarded()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
       "name": "pingFailureIsProcessedOnThePlayerExecutor()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "configuredNativeAliasesAreForwarded()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "deniedServerSelectionWhilePausedDoesNotCancelAutomaticEnqueue()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "globalQueueDisableDuringHandoffRecoversThenUsesStandalonePing()",
       "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
     },
     {
@@ -17,7 +33,35 @@
       "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
     },
     {
+      "name": "removedQueueEntryRestoresLimboWithoutReaddingPlayer()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "existingNativeQueueEntryIsPreserved()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
       "name": "emptyTitleListsDisableTitlesWithoutStoppingReconnect()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "inactiveQueueUsesStandalonePing()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "unavailableManagerDuringReloadDoesNotAbandonTheGuard()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "globalQueueDisableTransitionsActiveLimboToStandalonePing()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "physicalDisconnectCancelsAllNativeGuardTasksWithoutRemovingEntry()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "noQueueBackendKeepsStandalonePing()",
       "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
     },
     {
@@ -25,11 +69,75 @@
       "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
     },
     {
+      "name": "bypassUsesStandalonePingWithoutNativeImmediateConnect()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "listingServersWhilePausedDoesNotCancelAutomaticEnqueue()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "nativeHandoffGuardWaitsForNativeFailureBeforeRestoringLimbo()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "globalQueueDisableRetainsOnlyOwnedHandoffAuthorizationUntilRecovery()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "disabledIntegrationKeepsStandalonePing()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "rejectedRecoveryTurnClosesTheGuard()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "nativeDisableDuringKickInspectionKeepsOwnedAuthorization()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "standaloneFallbackNeverPingsAnUnregisteredTarget()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
       "name": "disconnectCancelsScheduledTasks()",
       "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
     },
     {
+      "name": "leavingWhilePausedPreventsDelayedAutomaticEnqueue()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "pausedQueueWaitsUntilJoiningIsAllowed()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "unrelatedSessionHandlerStopsRecoveryGuard()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "nativeQueueTakesOwnershipImmediatelyWithoutPinging()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "inFlightFallbackPreventsLimboRecovery()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
       "name": "delayedJoinDoesNotRunAfterDisconnectEvenWhenAlreadyQueued()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "existingOtherQueueIsNeverSwappedAutomatically()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "removedTargetQueueLookupTerminatesControllerWithoutAnOrphan()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "nativeBannedReasonRejectsManagedQueueKick()",
       "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
     }
   ]

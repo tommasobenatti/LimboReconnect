@@ -1,11 +1,23 @@
 {
-  "tests": 7,
+  "tests": 10,
   "failures": 0,
   "errors": 0,
   "skipped": 0,
   "cases": [
     {
+      "name": "managedRetryStillPreservesPreviousPluginsAuthenticationFailure()",
+      "classname": "net.elytrium.limboreconnect.listener.ReconnectListenerTest"
+    },
+    {
+      "name": "managedQueueRetryRecoversTransientReasonOutsideInitialRestartRegex()",
+      "classname": "net.elytrium.limboreconnect.listener.ReconnectListenerTest"
+    },
+    {
       "name": "preservesPreviouslyRegisteredKickCallback()",
+      "classname": "net.elytrium.limboreconnect.listener.ReconnectListenerTest"
+    },
+    {
+      "name": "acceptsMatchingShutdownOnlyDuringManagedNativeQueueRetry()",
       "classname": "net.elytrium.limboreconnect.listener.ReconnectListenerTest"
     },
     {

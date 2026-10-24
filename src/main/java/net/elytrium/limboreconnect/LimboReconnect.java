@@ -21,6 +21,8 @@ import com.google.inject.Inject;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.player.ServerPostConnectEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.network.ProtocolVersion;
@@ -41,7 +43,9 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import net.elytrium.limboapi.api.Limbo;
 import net.elytrium.limboapi.api.LimboFactory;
@@ -82,6 +86,7 @@ public class LimboReconnect {
   private final CommandMeta commandMeta;
   private Limbo limbo;
   private ReconnectListener listener;
+  private final Map<UUID, ReconnectHandler> reconnectHandlers = new ConcurrentHashMap<>();
 
   @Inject
   public LimboReconnect(Logger logger, ProxyServer server, @DataDirectory Path dataDirectory) {
@@ -227,8 +232,53 @@ public class LimboReconnect {
 
   @Subscribe
   public synchronized void onProxyShutdown(ProxyShutdownEvent event) {
+    this.reconnectHandlers.values().forEach(ReconnectHandler::close);
+    this.reconnectHandlers.clear();
     if (this.limbo != null) {
       this.limbo.dispose();
+    }
+  }
+
+  @Subscribe
+  public void onPlayerDisconnect(DisconnectEvent event) {
+    this.releaseHandler(event.getPlayer());
+  }
+
+  @Subscribe
+  public void onServerPostConnect(ServerPostConnectEvent event) {
+    this.releaseHandler(event.getPlayer());
+  }
+
+  private void releaseHandler(Player player) {
+    ReconnectHandler handler = this.reconnectHandlers.remove(player.getUniqueId());
+    if (handler != null) {
+      handler.close();
+    }
+  }
+
+  public ProxyServer getServer() {
+    return this.server;
+  }
+
+  public void trackHandler(Player player, ReconnectHandler handler) {
+    ReconnectHandler previous = this.reconnectHandlers.put(player.getUniqueId(), handler);
+    if (previous != null && previous != handler) {
+      previous.close();
+    }
+  }
+
+  public void removeHandler(Player player, ReconnectHandler handler) {
+    this.reconnectHandlers.remove(player.getUniqueId(), handler);
+  }
+
+  public boolean isManagedQueueRetry(Player player, RegisteredServer target, Component reason) {
+    ReconnectHandler handler = this.reconnectHandlers.get(player.getUniqueId());
+    return handler != null && handler.canRecoverQueueKick(target, reason);
+  }
+
+  public synchronized void recoverPlayer(Player player, ReconnectHandler handler) {
+    if (player.isActive() && this.reconnectHandlers.get(player.getUniqueId()) == handler) {
+      this.limbo.spawnPlayer(player, handler);
     }
   }
 
@@ -276,6 +326,10 @@ public class LimboReconnect {
     }
 
     connectedPlayer.getTabList().clearAll();
-    this.limbo.spawnPlayer(player, new ReconnectHandler(this, server));
+    ReconnectHandler handler = this.reconnectHandlers.get(player.getUniqueId());
+    if (handler == null || !handler.isNativeQueueTarget(server)) {
+      handler = new ReconnectHandler(this, server);
+    }
+    this.limbo.spawnPlayer(player, handler);
   }
 }

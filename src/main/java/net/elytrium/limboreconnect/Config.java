@@ -69,6 +69,8 @@ public class Config extends YamlSerializable {
   public boolean useLimbo = false;
   @Comment(value = @CommentValue("Require permission to reconnect (limboreconnect.reconnect)"))
   public boolean requirePermission = false;
+  @Comment(value = @CommentValue("Use Velocity-CTD's native queue for reconnects, preserving its priorities and backend readiness checks"))
+  public boolean integrateCtdQueue = true;
 
   public World world;
   public Messages messages;
