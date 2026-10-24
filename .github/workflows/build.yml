@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v4.2.2
         with:
           repository: tommasobenatti/LimboAPI
-          ref: 7470c09edfb781cc8c864895b76ecc27f39e8b08
+          ref: 259704d37c9bad334de2237010a81b6f08cecac4
           path: build/limboapi-source
       - name: Download verified Velocity-CTD
         env:

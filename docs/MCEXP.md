@@ -130,10 +130,10 @@ the uploaded binary. Release publication triggers another read-only CI check.
 
 ### Pinned companion API / CI matrix
 
-The new prepared-handler API is built from LimboAPI commit `7470c09edfb781cc8c864895b76ecc27f39e8b08`.
+The new prepared-handler API is built from LimboAPI commit `259704d37c9bad334de2237010a81b6f08cecac4`.
 CI checks out that exact source and builds :api:jar with the matrix's verified CTD
 artifact, then supplies it through -PlimboApiJar. It never silently compiles this
 release against the older upstream interface. Both CTD410 and411 pass the full
-suite; the paired API suite72 plus Reconnect71 total143 tests per target build.
+suite; the paired API suite73 plus Reconnect71 total144 tests per target build.
 The public guide and release notes explicitly retain the staging limitations for
 full live PLAY restart/reconnect, premium/password authentication and distributed Redis.

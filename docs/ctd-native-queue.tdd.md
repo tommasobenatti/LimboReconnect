@@ -126,3 +126,6 @@ insertion never restarts merely because the entry disappeared. No production ser
 was modified during development or verification.
 If the target registration is removed/replaced, the plugin closes its controller and
 disconnects using CTD's server-does-not-exist translation; it never pings the obsolete target.
+
+The separate [CTD411 startup smoke](native-queue-smoke.md) verifies real plugin
+construction, native queue-enabled login/CONFIG, ForcePack and reload lifecycle.
