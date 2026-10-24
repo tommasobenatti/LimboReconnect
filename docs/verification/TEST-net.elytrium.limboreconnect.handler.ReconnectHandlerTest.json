@@ -1,0 +1,36 @@
+{
+  "tests": 7,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "cases": [
+    {
+      "name": "pingFailureIsProcessedOnThePlayerExecutor()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "synchronousPingFailureDoesNotStopRetrying()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "lateFailedPingDoesNotRescheduleAfterDisconnect()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "emptyTitleListsDisableTitlesWithoutStoppingReconnect()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "lateSuccessfulPingDoesNotScheduleJoinAfterDisconnect()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "disconnectCancelsScheduledTasks()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    },
+    {
+      "name": "delayedJoinDoesNotRunAfterDisconnectEvenWhenAlreadyQueued()",
+      "classname": "net.elytrium.limboreconnect.handler.ReconnectHandlerTest"
+    }
+  ]
+}

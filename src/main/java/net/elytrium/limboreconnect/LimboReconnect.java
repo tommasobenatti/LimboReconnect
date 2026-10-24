@@ -22,7 +22,9 @@ import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.network.ProtocolVersion;
+import com.velocitypowered.api.plugin.Dependency;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
@@ -41,7 +43,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 import net.elytrium.limboapi.api.Limbo;
 import net.elytrium.limboapi.api.LimboFactory;
 import net.elytrium.limboapi.api.chunk.Dimension;
@@ -62,23 +63,25 @@ import org.slf4j.Logger;
     id = "limboreconnect",
     name = "LimboReconnect",
     version = BuildConstants.VERSION,
-    authors = {"SkyWatcher_2019", "hevav"}
+    authors = {"SkyWatcher_2019", "hevav"},
+    dependencies = {@Dependency(id = "limboapi")}
 )
 public class LimboReconnect {
 
-  public static final Config CONFIG = new Config();
+  public static volatile Config CONFIG = new Config();
   @Inject
   private static Logger LOGGER;
-  private static ComponentSerializer<Component, Component, String> SERIALIZER;
-  public final List<Title> offlineTitles = new ArrayList<>();
-  public final List<Title> connectingTitles = new ArrayList<>();
-  public Pattern triggerMessage;
+  private static volatile ComponentSerializer<Component, Component, String> SERIALIZER;
+  public volatile List<Title> offlineTitles = new ArrayList<>();
+  public volatile List<Title> connectingTitles = new ArrayList<>();
+  public volatile Pattern triggerMessage;
   private final ProxyServer server;
   private final Path configPath;
   private final Path dataDirectory;
   private final LimboFactory factory;
   private final CommandMeta commandMeta;
   private Limbo limbo;
+  private ReconnectListener listener;
 
   @Inject
   public LimboReconnect(Logger logger, ProxyServer server, @DataDirectory Path dataDirectory) {
@@ -100,6 +103,10 @@ public class LimboReconnect {
     SERIALIZER = serializer;
   }
 
+  private static void setConfig(Config config) {
+    CONFIG = config;
+  }
+
   public static Logger getLogger() {
     return LOGGER;
   }
@@ -113,44 +120,66 @@ public class LimboReconnect {
     this.reload();
   }
 
-  public void reload() {
-    CONFIG.reload(this.configPath);
+  public synchronized void reload() {
+    Config config = new Config();
+    try {
+      SafeConfigUpdater.update(this.configPath, path -> new Config().save(path),
+          path -> config.loadCandidate(path) && validateConfig(config));
+    } catch (IOException | RuntimeException exception) {
+      throw new IllegalStateException("Unable to safely load config.yml; the previous configuration remains active", exception);
+    }
 
-    if (CONFIG.triggerMessage.equals("((?i)^(server closed|server is restarting|multiplayer\\.disconnect\\.server_shutdown))+$")) {
+    if (config.triggerMessage.equals("((?i)^(server closed|server is restarting|multiplayer\\.disconnect\\.server_shutdown))+$")) {
       LOGGER.warn("Looks like you using default config!");
       LOGGER.warn("Please check 'trigger-message' option and confirm, that it matches your server's restart message");
     }
 
-    setSerializer(CONFIG.serializer.getSerializer());
+    ComponentSerializer<Component, Component, String> serializer = config.serializer.getSerializer();
 
-    Config.World.PlayerCoords playerCoords = CONFIG.world.playerCoords;
+    Config.World.PlayerCoords playerCoords = config.world.playerCoords;
 
     VirtualWorld world = this.factory.createVirtualWorld(
-        Dimension.valueOf(CONFIG.world.dimension), playerCoords.x, playerCoords.y, playerCoords.z, playerCoords.yaw, playerCoords.pitch);
+        Dimension.valueOf(config.world.dimension), playerCoords.x, playerCoords.y, playerCoords.z, playerCoords.yaw, playerCoords.pitch);
 
-    try {
-      this.triggerMessage = Pattern.compile(CONFIG.triggerMessage);
-    } catch (PatternSyntaxException e) {
-      throw new IllegalArgumentException("Unable to parse 'triggerMessage'  into a valid RegEx, check config: " + CONFIG.triggerMessage, e);
-    }
-
-    if (CONFIG.world.loadWorld) {
+    if (config.world.loadWorld) {
       try {
-        Path path = this.dataDirectory.resolve(CONFIG.world.worldFilePath);
-        WorldFile file = this.factory.openWorldFile(CONFIG.world.worldFileType, path);
+        Path path = this.dataDirectory.resolve(config.world.worldFilePath);
+        WorldFile file = this.factory.openWorldFile(config.world.worldFileType, path);
 
-        Config.World.WorldCoords coords = CONFIG.world.worldCoords;
-        file.toWorld(this.factory, world, coords.x, coords.y, coords.z, CONFIG.world.worldLightLevel);
+        Config.World.WorldCoords coords = config.world.worldCoords;
+        file.toWorld(this.factory, world, coords.x, coords.y, coords.z, config.world.worldLightLevel);
       } catch (IOException e) {
         throw new IllegalArgumentException(e);
       }
     }
 
-    this.limbo = this.factory.createLimbo(world)
+    List<Title> newOfflineTitles = new ArrayList<>();
+    config.messages.titles.titles.forEach(title -> newOfflineTitles.add(Title.title(
+        serializer.deserialize(title.title),
+        serializer.deserialize(title.subtitle),
+        Title.Times.times(
+            Duration.ofMillis(0),
+            Duration.ofMillis(1000 * 30),
+            Duration.ofMillis(0)
+        )
+    )));
+    List<Title> newConnectingTitles = new ArrayList<>();
+    config.messages.titles.connectingTitles.forEach(title -> newConnectingTitles.add(Title.title(
+        serializer.deserialize(title.title),
+        serializer.deserialize(title.subtitle),
+        Title.Times.times(
+            Duration.ofMillis(0),
+            Duration.ofMillis(1000 * 30),
+            Duration.ofMillis(0)
+        )
+    )));
+
+
+    final Limbo newLimbo = this.factory.createLimbo(world)
         .setName("LimboReconnect")
-        .setShouldRejoin(CONFIG.useLimbo)
-        .setShouldRespawn(CONFIG.useLimbo)
-        .setGameMode(CONFIG.world.gamemode)
+        .setShouldRejoin(config.useLimbo)
+        .setShouldRespawn(config.useLimbo)
+        .setGameMode(config.world.gamemode)
         .registerPacket(PacketDirection.CLIENTBOUND, PlaySound.class, null, new PacketMapping[] {
             new PacketMapping(0x29, ProtocolVersion.MINECRAFT_1_7_2, true),
             new PacketMapping(0x19, ProtocolVersion.MINECRAFT_1_9, true),
@@ -174,36 +203,63 @@ public class LimboReconnect {
             new PacketMapping(0x77, ProtocolVersion.MINECRAFT_26_3, true),
             });
 
-    this.offlineTitles.clear();
-    CONFIG.messages.titles.titles.forEach(title -> this.offlineTitles.add(Title.title(
-        SERIALIZER.deserialize(title.title),
-        SERIALIZER.deserialize(title.subtitle),
-        Title.Times.times(
-            Duration.ofMillis(0),
-            Duration.ofMillis(1000 * 30),
-            Duration.ofMillis(0)
-        )
-    )));
-    this.connectingTitles.clear();
-    CONFIG.messages.titles.connectingTitles.forEach(title -> this.connectingTitles.add(Title.title(
-        SERIALIZER.deserialize(title.title),
-        SERIALIZER.deserialize(title.subtitle),
-        Title.Times.times(
-            Duration.ofMillis(0),
-            Duration.ofMillis(1000 * 30),
-            Duration.ofMillis(0)
-        )
-    )));
 
+    final Limbo previousLimbo = this.limbo;
+    setConfig(config);
+    setSerializer(serializer);
+    this.triggerMessage = Pattern.compile(config.triggerMessage);
+    this.offlineTitles = List.copyOf(newOfflineTitles);
+    this.connectingTitles = List.copyOf(newConnectingTitles);
+    this.limbo = newLimbo;
+    if (previousLimbo != null) {
+      previousLimbo.dispose();
+    }
 
-    this.server.getEventManager().unregisterListeners(this);
-    this.server.getEventManager().register(this, new ReconnectListener(this));
+    if (this.listener != null) {
+      this.server.getEventManager().unregisterListener(this, this.listener);
+    }
+    this.listener = new ReconnectListener(this);
+    this.server.getEventManager().register(this, this.listener);
     CommandManager commandManager = this.server.getCommandManager();
     commandManager.unregister("limboreconnect");
     commandManager.register(this.commandMeta, new LimboReconnectCommand(this));
   }
 
-  public void addPlayer(Player player, RegisteredServer server) {
+  @Subscribe
+  public synchronized void onProxyShutdown(ProxyShutdownEvent event) {
+    if (this.limbo != null) {
+      this.limbo.dispose();
+    }
+  }
+
+  private static boolean validateConfig(Config config) {
+    try {
+      if (config.serializer == null || config.world == null || config.messages == null || config.sounds == null
+          || config.world.playerCoords == null || config.world.worldCoords == null || config.world.gamemode == null
+          || config.messages.titles == null || config.messages.titles.titles == null || config.messages.titles.connectingTitles == null
+          || config.sounds.waiting == null || config.sounds.connecting == null || config.sounds.waiting.name == null
+          || config.sounds.connecting.name == null || config.checkInterval <= 0 || config.pingTimeout <= 0 || config.joinDelay < 0
+          || config.messages.titles.showDelay <= 0 || config.messages.titles.showDelay > Long.MAX_VALUE / 50) {
+        return false;
+      }
+      Pattern.compile(config.triggerMessage);
+      Dimension.valueOf(config.world.dimension);
+      ComponentSerializer<Component, Component, String> serializer = config.serializer.getSerializer();
+      for (Config.Messages.Title title : config.messages.titles.titles) {
+        serializer.deserialize(title.title);
+        serializer.deserialize(title.subtitle);
+      }
+      for (Config.Messages.Title title : config.messages.titles.connectingTitles) {
+        serializer.deserialize(title.title);
+        serializer.deserialize(title.subtitle);
+      }
+      return true;
+    } catch (RuntimeException exception) {
+      return false;
+    }
+  }
+
+  public synchronized void addPlayer(Player player, RegisteredServer server) {
     ConnectedPlayer connectedPlayer = (ConnectedPlayer) player;
     MinecraftConnection connection = connectedPlayer.getConnection();
     MinecraftSessionHandler minecraftSessionHandler = connection.getActiveSessionHandler();

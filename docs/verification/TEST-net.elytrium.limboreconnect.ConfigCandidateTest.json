@@ -1,0 +1,24 @@
+{
+  "tests": 4,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "cases": [
+    {
+      "name": "acceptsUnknownSettingsWithoutLoadingOrRemovingThem()",
+      "classname": "net.elytrium.limboreconnect.ConfigCandidateTest"
+    },
+    {
+      "name": "rejectsInvalidKnownValueEvenWhenUnknownSettingsExist()",
+      "classname": "net.elytrium.limboreconnect.ConfigCandidateTest"
+    },
+    {
+      "name": "rejectsStringInBooleanField()",
+      "classname": "net.elytrium.limboreconnect.ConfigCandidateTest"
+    },
+    {
+      "name": "preservesExplicitlyEmptyTitleLists()",
+      "classname": "net.elytrium.limboreconnect.ConfigCandidateTest"
+    }
+  ]
+}

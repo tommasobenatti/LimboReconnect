@@ -1,0 +1,20 @@
+{
+  "tests": 3,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "cases": [
+    {
+      "name": "invalidConfigIsRejectedWithoutRewritingIt()",
+      "classname": "net.elytrium.limboreconnect.LimboReconnectLifecycleTest"
+    },
+    {
+      "name": "reloadAddsMissingDefaultsAndPreservesUnknownKeysAndComments()",
+      "classname": "net.elytrium.limboreconnect.LimboReconnectLifecycleTest"
+    },
+    {
+      "name": "reloadDisposesReplacedLimbo()",
+      "classname": "net.elytrium.limboreconnect.LimboReconnectLifecycleTest"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "tests": 7,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "cases": [
+    {
+      "name": "preservesPreviouslyRegisteredKickCallback()",
+      "classname": "net.elytrium.limboreconnect.listener.ReconnectListenerTest"
+    },
+    {
+      "name": "acceptsVelocityCtdWrappedDefaultDisconnectReason()",
+      "classname": "net.elytrium.limboreconnect.listener.ReconnectListenerTest"
+    },
+    {
+      "name": "doesNotInterceptInitialConnectionOrAuthenticationKicks()",
+      "classname": "net.elytrium.limboreconnect.listener.ReconnectListenerTest"
+    },
+    {
+      "name": "preservesReconnectForMatchingEstablishedServerShutdown()",
+      "classname": "net.elytrium.limboreconnect.listener.ReconnectListenerTest"
+    },
+    {
+      "name": "doesNotOverridePreviousCallbacksAuthenticationFailure()",
+      "classname": "net.elytrium.limboreconnect.listener.ReconnectListenerTest"
+    },
+    {
+      "name": "doesNotOverridePreviousCallbacksRedirect()",
+      "classname": "net.elytrium.limboreconnect.listener.ReconnectListenerTest"
+    },
+    {
+      "name": "acceptsVelocityCtdDefaultFallbackResult()",
+      "classname": "net.elytrium.limboreconnect.listener.ReconnectListenerTest"
+    }
+  ]
+}

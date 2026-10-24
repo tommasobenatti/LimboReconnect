@@ -17,7 +17,17 @@
 
 package net.elytrium.limboreconnect;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import net.elytrium.commons.kyori.serialization.Serializers;
 import net.elytrium.limboapi.api.file.BuiltInWorldFileType;
 import net.elytrium.limboapi.api.player.GameMode;
@@ -25,6 +35,10 @@ import net.elytrium.serializer.SerializerConfig;
 import net.elytrium.serializer.annotations.Comment;
 import net.elytrium.serializer.annotations.CommentValue;
 import net.elytrium.serializer.language.object.YamlSerializable;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 public class Config extends YamlSerializable {
 
@@ -67,6 +81,61 @@ public class Config extends YamlSerializable {
     this.world = new World();
     this.messages = new Messages();
     this.sounds = new Sounds();
+  }
+
+  boolean loadCandidate(Path path) {
+    LoaderOptions options = new LoaderOptions();
+    options.setAllowDuplicateKeys(false);
+    options.setMaxAliasesForCollections(0);
+    Yaml yaml = new Yaml(new SafeConstructor(options));
+    try (BufferedReader reader = Files.newBufferedReader(path)) {
+      Object values = yaml.load(reader);
+      StringWriter defaults = new StringWriter();
+      try (BufferedWriter writer = new BufferedWriter(defaults)) {
+        new Config().save(writer);
+      }
+      Object schema = yaml.load(defaults.toString());
+      DumperOptions output = new DumperOptions();
+      output.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+      String knownSettings = new Yaml(output).dump(knownSettings(values, schema));
+      // The typed reader flags unknown administrator keys as parse errors, so validate a known-only view.
+      // The original candidate remains untouched and is the only document committed to disk.
+      return this.load(new BufferedReader(new StringReader(knownSettings)));
+    } catch (IOException | RuntimeException exception) {
+      return false;
+    }
+  }
+
+  private static Object knownSettings(Object values, Object schema) {
+    if (schema instanceof Map<?, ?> schemaMap) {
+      if (!(values instanceof Map<?, ?> valueMap)) {
+        throw new IllegalArgumentException("Expected a configuration section");
+      }
+      Map<Object, Object> result = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : schemaMap.entrySet()) {
+        if (valueMap.containsKey(entry.getKey())) {
+          result.put(entry.getKey(), knownSettings(valueMap.get(entry.getKey()), entry.getValue()));
+        }
+      }
+      return result;
+    }
+    if (schema instanceof List<?> schemaList) {
+      if (!(values instanceof List<?> valueList)) {
+        throw new IllegalArgumentException("Expected a configuration list");
+      }
+      List<Object> result = new ArrayList<>();
+      for (Object value : valueList) {
+        result.add(schemaList.isEmpty() ? value : knownSettings(value, schemaList.getFirst()));
+      }
+      return result;
+    }
+    if ((schema instanceof Boolean && !(values instanceof Boolean))
+        || (schema instanceof String && !(values instanceof String))
+        || (schema instanceof Number && (!(values instanceof Number number) || !Double.isFinite(number.doubleValue())))
+        || (schema != null && values == null)) {
+      throw new IllegalArgumentException("Invalid configuration value type");
+    }
+    return values;
   }
 
 

@@ -1,0 +1,16 @@
+{
+  "tests": 2,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "cases": [
+    {
+      "name": "modernPacketWritesInlineSoundAndSeedWithoutTrailingData()",
+      "classname": "net.elytrium.limboreconnect.protocol.packets.PlaySoundTest"
+    },
+    {
+      "name": "legacyHighPitchIsClampedBeforeWritingUnsignedByte()",
+      "classname": "net.elytrium.limboreconnect.protocol.packets.PlaySoundTest"
+    }
+  ]
+}

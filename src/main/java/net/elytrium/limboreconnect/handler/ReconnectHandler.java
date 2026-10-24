@@ -22,6 +22,10 @@ import static net.elytrium.limboreconnect.LimboReconnect.CONFIG;
 import com.velocitypowered.api.proxy.server.PingOptions;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import net.elytrium.limboapi.api.Limbo;
 import net.elytrium.limboapi.api.LimboSessionHandler;
@@ -29,22 +33,32 @@ import net.elytrium.limboapi.api.player.LimboPlayer;
 import net.elytrium.limboreconnect.Config;
 import net.elytrium.limboreconnect.LimboReconnect;
 import net.elytrium.limboreconnect.protocol.packets.PlaySound;
+import net.kyori.adventure.title.Title;
 
 public class ReconnectHandler implements LimboSessionHandler {
 
-  private final PingOptions pingOptions = PingOptions.builder().timeout(Duration.ofMillis(CONFIG.pingTimeout)).build();
-  private final LimboReconnect plugin;
+  private final PingOptions pingOptions = PingOptions.builder().timeout(Duration.ofMillis(Math.max(1, CONFIG.pingTimeout))).build();
   private final RegisteredServer server;
+  private final List<Title> offlineTitles;
+  private final List<Title> connectingTitles;
+  private final long checkInterval = Math.max(1, CONFIG.checkInterval);
+  private final long joinDelay = Math.max(0, CONFIG.joinDelay);
+  private final long messageInterval = Math.clamp(CONFIG.messages.titles.showDelay, 1, Long.MAX_VALUE / 50) * 50;
   private LimboPlayer player;
-  private boolean connected = true;
+  private volatile boolean connected = true;
   private boolean connecting = false;
   private int titleIndex = -1;
   private final PlaySound waitSound;
   private final PlaySound connectSound;
+  private ScheduledFuture<?> pingTask;
+  private ScheduledFuture<?> messageTask;
+  private ScheduledFuture<?> reconnectTask;
+  private CompletableFuture<?> pendingPing;
 
   public ReconnectHandler(LimboReconnect plugin, RegisteredServer server) {
-    this.plugin = plugin;
     this.server = server;
+    this.offlineTitles = List.copyOf(plugin.offlineTitles);
+    this.connectingTitles = List.copyOf(plugin.connectingTitles);
     Config.Sounds sounds = CONFIG.sounds;
     double playerX = CONFIG.world.playerCoords.x;
     double playerY = CONFIG.world.playerCoords.y;
@@ -58,13 +72,20 @@ public class ReconnectHandler implements LimboSessionHandler {
     this.player = player;
     this.player.disableFalling();
     this.player.setGameMode(CONFIG.world.gamemode);
-    this.player.getScheduledExecutor().schedule(this::tick, CONFIG.checkInterval, TimeUnit.MILLISECONDS);
+    this.schedulePing();
     this.tickMessages();
   }
 
   @Override
   public void onDisconnect() {
     this.connected = false;
+    cancel(this.pingTask);
+    cancel(this.messageTask);
+    cancel(this.reconnectTask);
+    if (this.pendingPing != null) {
+      this.pendingPing.cancel(false);
+      this.pendingPing = null;
+    }
   }
 
   @Override
@@ -78,26 +99,53 @@ public class ReconnectHandler implements LimboSessionHandler {
       return;
     }
 
-    this.server.ping(this.pingOptions).whenComplete((ping, exception) -> {
-      if (exception != null) {
-        if (CONFIG.debug) {
-          LimboReconnect.getLogger()
-              .info("{} can't ping {}", this.player.getProxyPlayer().getGameProfile().getName(), this.server.getServerInfo().getName());
-        }
-
-        this.player.getScheduledExecutor().schedule(this::tick, CONFIG.checkInterval, TimeUnit.MILLISECONDS);
-      } else {
-        this.player.getScheduledExecutor().execute(() -> {
-          this.connecting = true;
-          this.titleIndex = -1;
-          this.player.getScheduledExecutor().schedule(() -> {
-            this.player.writePacket(this.connectSound);
-            this.player.getProxyPlayer().resetTitle();
-            this.player.disconnect(this.server);
-          }, CONFIG.joinDelay, TimeUnit.MILLISECONDS);
-        });
+    try {
+      this.pendingPing = this.server.ping(this.pingOptions);
+    } catch (RuntimeException exception) {
+      this.handlePing(exception);
+      return;
+    }
+    this.pendingPing.whenComplete((ping, exception) -> {
+      if (!this.connected) {
+        return;
+      }
+      try {
+        this.player.getScheduledExecutor().execute(() -> this.handlePing(exception));
+      } catch (RejectedExecutionException rejected) {
+        // The connection event loop can stop while a backend ping completes.
+        this.onDisconnect();
       }
     });
+  }
+
+  private void handlePing(Throwable exception) {
+    this.pendingPing = null;
+    if (!this.connected || !this.player.getProxyPlayer().isActive()) {
+      this.onDisconnect();
+      return;
+    }
+    if (exception != null) {
+      if (CONFIG.debug) {
+        LimboReconnect.getLogger()
+            .info("{} can't ping {}", this.player.getProxyPlayer().getUsername(), this.server.getServerInfo().getName());
+      }
+      this.schedulePing();
+    } else {
+      this.connecting = true;
+      this.titleIndex = -1;
+      this.reconnectTask = this.player.getScheduledExecutor().schedule(() -> {
+        if (this.connected && this.player.getProxyPlayer().isActive()) {
+          this.player.writePacket(this.connectSound);
+          this.player.getProxyPlayer().resetTitle();
+          this.onDisconnect();
+          this.player.disconnect(this.server);
+        }
+      }, this.joinDelay, TimeUnit.MILLISECONDS);
+    }
+  }
+
+  private void schedulePing() {
+    this.pingTask = this.player.getScheduledExecutor().schedule(this::tick, this.checkInterval, TimeUnit.MILLISECONDS);
   }
 
   private void tickMessages() {
@@ -105,14 +153,18 @@ public class ReconnectHandler implements LimboSessionHandler {
       return;
     }
 
-    if (this.connecting) {
-      this.titleIndex = (this.titleIndex + 1) % this.plugin.connectingTitles.size();
-      this.player.getProxyPlayer().showTitle(this.plugin.connectingTitles.get(this.titleIndex));
-    } else {
-      this.titleIndex = (this.titleIndex + 1) % this.plugin.offlineTitles.size();
-      this.player.getProxyPlayer().showTitle(this.plugin.offlineTitles.get(this.titleIndex));
+    List<Title> titles = this.connecting ? this.connectingTitles : this.offlineTitles;
+    if (!titles.isEmpty()) {
+      this.titleIndex = (this.titleIndex + 1) % titles.size();
+      this.player.getProxyPlayer().showTitle(titles.get(this.titleIndex));
     }
     this.player.writePacket(this.waitSound);
-    this.player.getScheduledExecutor().schedule(this::tickMessages, CONFIG.messages.titles.showDelay * 50, TimeUnit.MILLISECONDS);
+    this.messageTask = this.player.getScheduledExecutor().schedule(this::tickMessages, this.messageInterval, TimeUnit.MILLISECONDS);
+  }
+
+  private static void cancel(ScheduledFuture<?> task) {
+    if (task != null) {
+      task.cancel(false);
+    }
   }
 }

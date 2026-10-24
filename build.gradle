@@ -7,7 +7,7 @@ plugins {
 }
 
 setGroup("net.elytrium")
-setVersion("1.1.7")
+setVersion("1.1.7-MCExp-CTD410")
 
 compileJava {
   getOptions().setEncoding("UTF-8")
@@ -33,11 +33,28 @@ repositories {
 
 dependencies {
   compileOnly("net.elytrium.limboapi:api:$limboapiVersion")
-  compileOnly("com.velocitypowered:velocity-api:$velocityVersion")
-  annotationProcessor("com.velocitypowered:velocity-api:$velocityVersion")
-  compileOnly("com.velocitypowered:velocity-proxy:$velocityVersion")
+  if (providers.gradleProperty("velocityCtdJar").isPresent()) {
+    compileOnly(files(providers.gradleProperty("velocityCtdJar").get()))
+    annotationProcessor(files(providers.gradleProperty("velocityCtdJar").get()))
+  } else {
+    compileOnly("com.velocitypowered:velocity-api:$velocityVersion")
+    annotationProcessor("com.velocitypowered:velocity-api:$velocityVersion")
+    compileOnly("com.velocitypowered:velocity-proxy:$velocityVersion")
+  }
   compileOnly("io.netty:netty-handler:$nettyVersion")
   implementation("net.elytrium:serializer:$serializerVersion")
+  implementation("org.yaml:snakeyaml:2.5")
+
+  testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
+  testImplementation("org.mockito:mockito-core:5.20.0")
+  testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+configurations.testImplementation.extendsFrom(configurations.compileOnly)
+
+test {
+  useJUnitPlatform()
+  jvmArgs("-XX:+EnableDynamicAgentLoading")
 }
 
 shadowJar {
@@ -45,6 +62,7 @@ shadowJar {
 
   relocate("net.elytrium.commons.velocity", "net.elytrium.limboapi.thirdparty.commons.velocity")
   relocate("net.elytrium.commons.kyori", "net.elytrium.limboapi.thirdparty.commons.kyori")
+  relocate("org.yaml.snakeyaml", "net.elytrium.limboreconnect.thirdparty.snakeyaml")
 }
 
 license {

@@ -19,8 +19,11 @@ package net.elytrium.limboreconnect.listener;
 
 import static net.elytrium.limboreconnect.LimboReconnect.CONFIG;
 
+import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.player.KickedFromServerEvent;
 import java.util.Objects;
+import java.util.function.Function;
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent;
 import net.elytrium.limboreconnect.LimboReconnect;
 import net.kyori.adventure.text.Component;
@@ -39,10 +42,20 @@ public class ReconnectListener {
     this.plugin = plugin;
   }
 
-  @Subscribe
+  @Subscribe(order = PostOrder.LAST)
   public void onLoginLimboRegister(LoginLimboRegisterEvent event) {
+    Function<KickedFromServerEvent, Boolean> previous = event.getOnKickCallback();
     event.setOnKickCallback(kickEvent -> {
-      if (kickEvent.kickedDuringServerConnect()) {
+      KickedFromServerEvent.ServerKickResult originalResult = kickEvent.getResult();
+      if (previous != null) {
+        if (Boolean.TRUE.equals(previous.apply(kickEvent))) {
+          return true;
+        }
+        if (kickEvent.getResult() != originalResult) {
+          return false;
+        }
+      }
+      if (kickEvent.kickedDuringServerConnect() || !kickEvent.getPlayer().isActive()) {
         return false;
       }
 

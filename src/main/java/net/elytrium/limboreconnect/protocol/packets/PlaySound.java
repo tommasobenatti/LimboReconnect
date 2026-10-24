@@ -63,7 +63,7 @@ public class PlaySound implements MinecraftPacket {
     if (protocolVersion.noLessThan(ProtocolVersion.MINECRAFT_1_10)) {
       byteBuf.writeFloat(this.pitch);
     } else {
-      byteBuf.writeByte((int) (this.pitch * 63.5F));
+      byteBuf.writeByte(Math.clamp((int) (this.pitch * 63.5F), 0, 255));
     }
     if (protocolVersion.noLessThan(ProtocolVersion.MINECRAFT_1_19)) {
       byteBuf.writeLong(0);
